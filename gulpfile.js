@@ -1,12 +1,3 @@
-var project       = 'nvQuickTheme', // If using dev environment in live instance, this needs to be the same as your root folder name.
-    version       = '1.0.0',
-    author        = 'TK Sheppard &amp; David Poindexter', 
-    company       = 'nvisionative',
-    url           = 'www.nvquicktheme.com',
-    email         = 'support@nvisionative.com',
-    description   = 'A DNN Theme Building Framework';
-
-var manifest      = './manifest.json';
 var gulp          = require('gulp'),
     autoprefixer  = require('gulp-autoprefixer'),
     jshint        = require('gulp-jshint'),
@@ -20,10 +11,23 @@ var gulp          = require('gulp'),
     zip           = require('gulp-zip'),
     clean         = require('gulp-clean'),
     path          = require('path'),
-    config        = require( manifest ),
+    details       = require('./project-details.json'),
+    project       = details.project,
+    version       = details.version,
+    author        = details.author,
+    company       = details.company,
+    url           = details.url,
+    email         = details.email,
+    description   = details.description,
+    config        = require('./pathing.json'),
     node          = ( config.node.length )? config.node+'/' : '',
+    assets        = ( config.assets.length )? config.assets+'/' : '',
     src           = ( config.src.length )? config.src+'/' : '',
-    dist          = ( config.dist.length )? config.dist+'/' : '';
+    dist          = ( config.dist.length )? config.dist+'/' : '',
+    temp          = ( config.temp.length )? config.temp+'/' : '',
+    build         = ( config.build.length )? config.build+'/' : '';
+    
+
 
 /*
 *	IMAGE/SVG TASKS
@@ -31,9 +35,14 @@ var gulp          = require('gulp'),
     
 // Compresses images for production.
 gulp.task('images', function() {
-	return gulp.src( './'+src+'images/**/*.{jpg,jpeg,png,gif}' )
-		.pipe(imagemin())
-		.pipe(gulp.dest( './'+dist+'images/' ));
+	return gulp.src( './images/**/*.{jpg,jpeg,png,gif}' )
+		.pipe(imagemin({
+      interlaced: true,
+      progressive: true,
+      optimizationLevel: 5,
+      svgoPlugins: [{removeViewBox: true}]
+    }))
+		.pipe(gulp.dest( './dist/images/' ));
 });
 
 
@@ -53,6 +62,17 @@ gulp.task('scss', function() {
 		.pipe(notify({message: 'Styles compiled successfully!', title : 'sass', sound: false}));
 });
 
+// Development Bootstrap creation.
+// Checks for errors and concats. Minifies. All Bootstrap CSS
+gulp.task('bscss', function() {
+  return gulp.src('./'+src+assets+'bootstrap/scss/**/*.scss')
+    .pipe(sass({outputStyle: 'compressed'}).on('error', sass.logError))
+    .pipe(rename({suffix: '.min'}))
+    .pipe(autoprefixer({browsers: ['last 2 versions', 'ie >= 9', '> 1%']}))
+		.pipe(gulp.dest( './'+dist+'css/'))
+		.pipe(notify({message: 'Styles compiled successfully!', title : 'bootstrap', sound: false}));
+})
+
 
 
 /*
@@ -62,32 +82,30 @@ gulp.task('scss', function() {
 // Development JS creation.
 // Checks for errors and concats. Minifies.
 gulp.task('js', function() {
-    return gulp.src( [ './'+src+'js/*.js'] )
-      .pipe(jshint())
-      .pipe(uglify())
-      .pipe(rename({suffix: '.min'}))
-      .pipe(gulp.dest( './'+dist+'js/'))
-      .pipe(jshint.reporter('fail'))
-      .pipe(notify(function (file) {
-		    if (file.jshint.success) {
-		    	return { message : 'JS much excellent success!',
-									title : file.relative,
-									sound: false,
-									icon: path.join('node_modules/gulp-notify/node', 'gulp.png'),
-								};
-		    }
-		    var errors = file.jshint.results.map(function (data) {
-		       	if (data.error) {
-		        	return "(" + data.error.line + ':' + data.error.character + ') ' + data.error.reason;
-		        }
-		    }).join("\n");
-		    return { message : file.relative + " (" + file.jshint.results.length + " errors)\n" + errors,
-								sound: "Frog",
-								emitError : true,
-								icon: path.join('node_modules/gulp-notify/node', 'gulp-error.png'),
-								title : 'JSLint'
-							};
-    	}))
+  return gulp.src( [ './'+src+'js/*.js'] )
+    .pipe(jshint())
+    .pipe(uglify())
+    .pipe(rename({suffix: '.min'}))
+    .pipe(gulp.dest( './'+dist+'js/'))
+    .pipe(jshint.reporter('fail'))
+    .pipe(notify(function (file) {
+      if (file.jshint.success) {
+        return { message : 'JS much excellent success!',
+          title : file.relative,
+          sound: false,
+        };
+      }
+      var errors = file.jshint.results.map(function (data) {
+        if (data.error) {
+          return "(" + data.error.line + ':' + data.error.character + ') ' + data.error.reason;
+        }
+      }).join("\n");
+      return { message : file.relative + " (" + file.jshint.results.length + " errors)\n" + errors,
+        sound: false,
+        emitError : true,
+        title : 'JSLint'
+      };
+    }))
 });
 
 
@@ -98,7 +116,7 @@ gulp.task('js', function() {
 
 gulp.task('containers', function() {
   gulp.src('./containers/*')
-    .pipe(gulp.dest('../../Containers/' +project+ '/'))
+    .pipe(gulp.dest('../../Containers/'+project+'/'))
     .pipe(notify({message: 'Containers updated!', title : 'containers', sound: false}));
 });
 
@@ -110,17 +128,18 @@ gulp.task('containers', function() {
 
 // Pulls from packages and distributes where necessary.
 // Add/modify as needed.
-gulp.task('update', function() {
+gulp.task('init', function() {
 
 	// This copies the normalize css file over to the scss components folder.
-	// If you update normalize it will get overwritten if you run [setup].
+	// This will overwrite any changes you've made to normalize.css.
 	gulp.src( './'+node+'/normalize.css/normalize.css' )
 		.pipe(rename("_normalize.scss"))
 		.pipe(gulp.dest( './'+src+"scss/components/"));
   
-	// Copies over bootstrap css and js to dist.
-	gulp.src( './'+node+'/bootstrap/dist/css/bootstrap.min.css')
-		.pipe(gulp.dest( './'+dist+"/css/"));
+  // Copies over bootstrap scss and js to dist.
+  // This will overwrite any changes you've made to bootstrap's scss
+	gulp.src( './'+node+'/bootstrap/scss/**/*', {base: './'+node})
+		.pipe(gulp.dest( './'+src+assets));
   gulp.src( './'+node+'/bootstrap/dist/js/bootstrap.bundle.min.js')
 		.pipe(gulp.dest( './'+dist+"/js/"));
   
@@ -132,9 +151,9 @@ gulp.task('update', function() {
     
 });
 
-// Takes the information provided at the top of this file and populates it into the dnn-manifest file.
+// Takes the information provided at the top of this file and populates it into the manifest.dnn file.
 gulp.task('manifest', function() {
-  gulp.src('./dnn-manifest.dnn')
+  gulp.src('./manifest.dnn')
     .pipe(replace(/\<package name\=\"(.*?)(?=\")/, '<package name="'+company+ '.' +project))
     .pipe(replace(/type\=\"Skin\" version\=\"(.*?)(?=\")/, 'type="Skin" version="'+version))
     .pipe(replace(/\<friendlyName\>(.*?)(?=\<)/, '<friendlyName>'+project))
@@ -156,80 +175,45 @@ gulp.task('manifest', function() {
 *	PACKAGING TASKS
 * ------------------------------------------------------*/
 
-// Zips the dist/css Folder
-gulp.task('zipcss', function() {
-  return gulp.src('./'+dist+'/css/*')
-    .pipe(zip('css.zip'))
-    .pipe(gulp.dest('./'+dist+'/css/'))
-});
-  
-// Zips the dist/js Folder
-gulp.task('zipjs', function() {
-  return gulp.src('./'+dist+'/js/*')
-    .pipe(zip('js.zip'))
-    .pipe(gulp.dest('./'+dist+'/js/'))
+// Zips dist folder
+gulp.task('zipdist', function() {
+  return gulp.src('dist/**/*')
+    .pipe(zip('dist.zip'))
+    .pipe(gulp.dest('./'+temp))
 });
 
-// Zips the dist/images Folder
-gulp.task('zipimages', function() {
-  return gulp.src('./'+dist+'/images/*')
-    .pipe(zip('images.zip'))
-    .pipe(gulp.dest('./'+dist+'/images/'))
-});
-
-// Zips the dist/fonts Folder
-gulp.task('zipfonts', function() {
-  return gulp.src('./'+dist+'/fonts/*')
-    .pipe(zip('fonts.zip'))
-    .pipe(gulp.dest('./'+dist+'/fonts/'))
-});
-
-// Zips the containers Folder
+// Zips containers folder
 gulp.task('zipcontainers', function() {
-  return gulp.src('./containers/*')
+  return gulp.src('./containers/**/*')
     .pipe(zip('cont.zip'))
-    .pipe(gulp.dest('./containers/'))
-});
-  
-// Zips the menus Folder
-gulp.task('zipmenus', function() {
-  return gulp.src('./menus/main/*')
-    .pipe(zip('menus.zip'))
-    .pipe(gulp.dest('./menus/main/'))
+    .pipe(gulp.dest('./'+temp))
 });
 
-// Zips the Partials Folder
-gulp.task('zippartials', function() {
-  return gulp.src('./partials/*')
-    .pipe(gulp.dest('./_temp/'))
+// Zips everything else
+gulp.task('zipelse', function() {
+  return gulp.src(['./menus/**/*', './partials/*', '*.{ascx,xml,html,htm}'], {base: '.'})
+    .pipe(gulp.dest('./'+temp))
     .pipe(replace('dist/', ''))
-    .pipe(zip('partials.zip'))
-    .pipe(gulp.dest('./partials/'))
+    .pipe(zip('else.zip'))
+    .pipe(gulp.dest('./'+temp))
 });
 
-// Zips the root Folder template files
-gulp.task('ziproot', function() {
-  return gulp.src(['*.ascx', '*.xml', '*.html', '*.htm'])
-    .pipe(zip('root.zip'))
-    .pipe(gulp.dest('./'))
-});
-
-// Runs all the Zip tasks
+// Runs all the zip tasks
 gulp.task('buildzips', function (cb) {
-  sequence(['zipcss', 'zipjs', 'zipimages', 'zipfonts', 'zipcontainers', 'zipmenus', 'zippartials', 'ziproot'], cb)
+  sequence(['zipdist', 'zipcontainers', 'zipelse'], cb)
 });
 
 // Zips the .zip files and single files into a package zip file.
-// Will need to change if filenames change, or adding specific files.
+// Will need to change if adding specific files.
 gulp.task('zipfiles', function() { 
-  return gulp.src(['./**/*.zip', '*.dnn', '*.png', '*.jpg', 'LICENSE', '!./_temp', '!./build/*'])
+  return gulp.src(['./'+temp+'*.zip','*.{dnn,png,jpg}', 'LICENSE'])
     .pipe(zip(project+'\_'+version+'\_install.zip'))
-    .pipe(gulp.dest('./build/'))
+    .pipe(gulp.dest('./'+build))
 });
 
-// Cleans up all directory zip files.
+// Cleans temp folder
 gulp.task('cleanup', function() {
-  return gulp.src(['./*/**/*.zip', './_temp', 'root.zip', '!./build/*'])
+  return gulp.src('./'+temp)
     .pipe(clean())
 });
 
@@ -242,12 +226,14 @@ gulp.task('cleanup', function() {
 // gulp watch
 gulp.task('watch', function () {
     gulp.watch( src+"scss/**/*.scss", ['scss'])
+    gulp.watch( src+assets+"bootstrap/scss/**/*.scss", ['bscss'])
     gulp.watch([ src+"js/**/*.js"], ['js'])
     gulp.watch( './containers/*', ['containers'])
+    gulp.watch( './project-details.json', ['manifest'])
 });
 
 // gulp build
-gulp.task('build', ['scss', 'js', 'images', 'containers']);
+gulp.task('build', ['scss', 'bscss', 'js', 'images', 'containers', 'manifest']);
 
 // gulp package
 gulp.task('package', sequence('build', 'buildzips', 'zipfiles', 'cleanup'));
